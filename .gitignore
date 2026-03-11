@@ -1,0 +1,14 @@
+# PlatformIO build files
+.pio/
+.pioenvs/
+.piolibdeps/
+
+# VS Code
+.vscode/
+
+# build folders
+build/
+
+# OS files
+.DS_Store
+Thumbs.db
