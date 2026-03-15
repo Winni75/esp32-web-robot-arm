@@ -1,6 +1,6 @@
 # ESP32 Web Robot Arm
 
-A practice and portfolio project for controlling a **5-axis robotic arm via a web interface running on an ESP32**.
+A practice and portfolio project for controlling a **6-axis robotic arm via a web interface running on an ESP32**.
 
 The project demonstrates how embedded hardware can be controlled through a browser interface using a built-in microcontroller web server.
 
@@ -46,7 +46,7 @@ The ESP32 acts as a **WiFi web server**, allowing the robotic arm to be controll
 
 ## Phase 3 – Full Robot Control
 
-* [ ] Add control for **5 servo motors**
+* [ ] Add control for **6 servo motors**
 * [ ] Implement Robotic Arm class
 * [ ] Create Servo Controller module
 * [ ] Add safety limits for angles
@@ -114,7 +114,7 @@ This project is intended to practice:
 # Planned Hardware
 
 * ESP32 microcontroller
-* 5 servo motors
+* 6 servo motors
 * 3D printed robotic arm
 * external 5V power supply
 
