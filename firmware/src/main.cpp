@@ -2,8 +2,8 @@
 #include <WiFi.h>
 #include <WebServer.h>
 
-const char* ssid = "FRITZ!Box 7530 MI-2G&5G";
-const char* password = "72335155615336606495";
+const char* ssid = "WIFI_SSID";
+const char* password = "WIFI_PASSWORD";
 
 WebServer server(80);
 
