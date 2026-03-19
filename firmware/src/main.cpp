@@ -3,10 +3,6 @@
 #include <WebServer.h>
 #include "secrets.h"
 
-const char* ssid = WIFI_SSID;
-const char* password = WIFI_PASSWORD;
-
-
 WebServer server(80);
 
 void handleRoot() {
@@ -69,7 +65,7 @@ void setup() {
     delay(1000);
 
     Serial.println("Verbinde mit WLAN...");
-    WiFi.begin(ssid, password);
+    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
 
     while (WiFi.status() != WL_CONNECTED) {
         delay(500);
