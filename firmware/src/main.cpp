@@ -44,14 +44,18 @@ void handleRoot() {
 <body>
     <h1>ESP32 Roboterarm</h1>
     <p>Webserver läuft erfolgreich.</p>
-    <button onclick="alert('Button 1 wurde geklickt')">Button 1</button>
-    <button onclick="alert('Button 2 wurde geklickt')">Button 2</button>
+    <button onclick="window.location.href='/test'">Test Button</button>
 </body>
 </html>
 )rawliteral";
 
     Serial.println("Browser Anfrage auf / empfangen");
     server.send(200, "text/html", html);
+}
+
+void handleTest() {
+    Serial.println("TEST BUTTON GEDRUECKT!");
+    server.send(200, "text/plain", "Test erfolgreich");
 }
 
 void handleNotFound() {
@@ -78,6 +82,7 @@ void setup() {
     Serial.println(WiFi.localIP());
 
     server.on("/", handleRoot);
+    server.on("/test", handleTest);
     server.onNotFound(handleNotFound);
     server.begin();
 
