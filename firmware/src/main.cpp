@@ -5,7 +5,12 @@
 
 WebServer server(80);
 
+const int LED_PIN = 2;
+bool ledStatus = false;
+
 void handleRoot() {
+    String statusText = ledStatus ? "AN" : "AUS";
+
     String html = R"rawliteral(
 <!DOCTYPE html>
 <html lang="de">
@@ -25,6 +30,7 @@ void handleRoot() {
         }
         p {
             color: #666;
+            font-size: 18px;
         }
         button {
             padding: 15px 25px;
@@ -33,29 +39,48 @@ void handleRoot() {
             cursor: pointer;
             border: none;
             border-radius: 8px;
-            background-color: #4CAF50;
             color: white;
         }
+        .an {
+            background-color: #4CAF50;
+        }
+        .aus {
+            background-color: #d9534f;
+        }
         button:hover {
-            background-color: #45a049;
+            opacity: 0.9;
         }
     </style>
 </head>
 <body>
     <h1>ESP32 Roboterarm</h1>
-    <p>Webserver läuft erfolgreich.</p>
-    <button onclick="window.location.href='/test'">Test Button</button>
+    <p>LED Status: STATUS_TEXT</p>
+    <button class="an" onclick="window.location.href='/led-an'">LED AN</button>
+    <button class="aus" onclick="window.location.href='/led-aus'">LED AUS</button>
 </body>
 </html>
 )rawliteral";
+
+    html.replace("STATUS_TEXT", statusText);
 
     Serial.println("Browser Anfrage auf / empfangen");
     server.send(200, "text/html", html);
 }
 
-void handleTest() {
-    Serial.println("TEST BUTTON GEDRUECKT!");
-    server.send(200, "text/plain", "Test erfolgreich");
+void handleLedAn() {
+    digitalWrite(LED_PIN, HIGH);
+    ledStatus = true;
+    Serial.println("LED wurde eingeschaltet");
+    server.sendHeader("Location", "/");
+    server.send(303);
+}
+
+void handleLedAus() {
+    digitalWrite(LED_PIN, LOW);
+    ledStatus = false;
+    Serial.println("LED wurde ausgeschaltet");
+    server.sendHeader("Location", "/");
+    server.send(303);
 }
 
 void handleNotFound() {
@@ -67,6 +92,9 @@ void handleNotFound() {
 void setup() {
     Serial.begin(115200);
     delay(1000);
+
+    pinMode(LED_PIN, OUTPUT);
+    digitalWrite(LED_PIN, LOW);
 
     Serial.println("Verbinde mit WLAN...");
     WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
@@ -82,7 +110,8 @@ void setup() {
     Serial.println(WiFi.localIP());
 
     server.on("/", handleRoot);
-    server.on("/test", handleTest);
+    server.on("/led-an", handleLedAn);
+    server.on("/led-aus", handleLedAus);
     server.onNotFound(handleNotFound);
     server.begin();
 
