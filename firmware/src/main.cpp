@@ -10,8 +10,52 @@ const char* password = WIFI_PASSWORD;
 WebServer server(80);
 
 void handleRoot() {
-    Serial.println("Browser Anfrage empfangen!");
-    server.send(200, "text/plain", "ESP32 Server funktioniert!");
+    String html = R"rawliteral(
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ESP32 Roboterarm</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            margin-top: 40px;
+            background-color: #f5f5f5;
+        }
+        h1 {
+            color: #333;
+        }
+        p {
+            color: #666;
+        }
+        button {
+            padding: 15px 25px;
+            margin: 10px;
+            font-size: 18px;
+            cursor: pointer;
+            border: none;
+            border-radius: 8px;
+            background-color: #4CAF50;
+            color: white;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+    </style>
+</head>
+<body>
+    <h1>ESP32 Roboterarm</h1>
+    <p>Webserver läuft erfolgreich.</p>
+    <button onclick="alert('Button 1 wurde geklickt')">Button 1</button>
+    <button onclick="alert('Button 2 wurde geklickt')">Button 2</button>
+</body>
+</html>
+)rawliteral";
+
+    Serial.println("Browser Anfrage auf / empfangen");
+    server.send(200, "text/html", html);
 }
 
 void handleNotFound() {
