@@ -30,8 +30,8 @@ The ESP32 acts as a **WiFi web server**, allowing the robotic arm to be controll
 
 * [X] Setup PlatformIO project
 * [X] Connect ESP32 to WiFi
-* [ ] Start ESP32 Web Server
-* [ ] Serve a simple HTML test page
+* [X] Start ESP32 Web Server
+* [X] Serve a simple HTML test page
 
 ---
 
