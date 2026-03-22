@@ -2,7 +2,6 @@
 #include <WiFi.h>
 #include <WebServer.h>
 #include <ESP32Servo.h>
-#include "secrets.h"
 
 WebServer server(80);
 
@@ -19,10 +18,14 @@ int servoTargets[6]   = {90, 90, 90, 90, 90, 90};
 const int servoMin[6] = {0, 0, 0, 20, 0, 50};
 const int servoMax[6] = {180, 180, 180, 160, 180, 125};
 
+// Access Point Daten
+const char* apName = "ESP32-Roboterarm";
+const char* apPassword = "robotarm123";
+
 // Geschwindigkeit der weichen Bewegung
 unsigned long lastServoUpdate = 0;
-const int servoStepDelayMs = 15;   // kleiner = schneller
-const int servoStepSize = 1;       // 1 Grad pro Schritt
+const int servoStepDelayMs = 15;
+const int servoStepSize = 1;
 
 String buildHtml() {
     String html = R"rawliteral(
@@ -79,6 +82,7 @@ String buildHtml() {
 <body>
     <h1>ESP32 Roboterarm</h1>
     <div class="card">
+        <p><strong>Netzwerk:</strong> AP_NAME</p>
         <p><strong>IP-Adresse:</strong> IP_PLACEHOLDER</p>
         <p class="hint">Die Servos folgen den Schiebern weich in Echtzeit.</p>
     </div>
@@ -109,7 +113,8 @@ String buildHtml() {
 </html>
 )rawliteral";
 
-    html.replace("IP_PLACEHOLDER", WiFi.localIP().toString());
+    html.replace("IP_PLACEHOLDER", WiFi.softAPIP().toString());
+    html.replace("AP_NAME", String(apName));
 
     String rows = "";
     for (int i = 0; i < 6; i++) {
@@ -210,28 +215,27 @@ void setup() {
     Serial.begin(115200);
     delay(1000);
 
-    Serial.println("Verbinde mit WLAN...");
-    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+    Serial.println("Starte ESP32 Access Point...");
 
-    while (WiFi.status() != WL_CONNECTED) {
-        delay(500);
-        Serial.print(".");
+    bool apStarted = WiFi.softAP(apName, apPassword);
+
+    if (apStarted) {
+        Serial.println("Access Point gestartet!");
+        Serial.print("WLAN-Name: ");
+        Serial.println(apName);
+        Serial.print("IP-Adresse: ");
+        Serial.println(WiFi.softAPIP());
+    } else {
+        Serial.println("Fehler beim Start des Access Points!");
     }
-
-    Serial.println();
-    Serial.println("WLAN verbunden!");
-    Serial.print("IP-Adresse: ");
-    Serial.println(WiFi.localIP());
 
     for (int i = 0; i < 6; i++) {
         servos[i].setPeriodHertz(50);
         servos[i].attach(servoPins[i], 500, 2400);
 
-        // Grundstellung 90 Grad
         servoPositions[i] = 90;
         servoTargets[i] = 90;
 
-        // Sicherheitshalber begrenzen
         servoPositions[i] = constrain(servoPositions[i], servoMin[i], servoMax[i]);
         servoTargets[i] = constrain(servoTargets[i], servoMin[i], servoMax[i]);
 
