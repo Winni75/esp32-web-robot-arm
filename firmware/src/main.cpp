@@ -14,6 +14,9 @@ const int servoPins[6] = {13, 12, 14, 27, 26, 25};
 int servoPositions[6] = {90, 90, 90, 90, 90, 90};
 int servoTargets[6]   = {90, 90, 90, 90, 90, 90};
 
+// Preset-Speicher
+int preset[6] = {90, 90, 90, 90, 90, 90};
+
 // Grenzen
 const int servoMin[6] = {0, 0, 0, 20, 0, 50};
 const int servoMax[6] = {180, 180, 180, 160, 180, 125};
@@ -27,6 +30,9 @@ unsigned long lastServoUpdate = 0;
 const int servoStepDelayMs = 15;
 const int servoStepSize = 1;
 
+// -------------------------
+// HTML erzeugen
+// -------------------------
 String buildHtml() {
     String html = R"rawliteral(
 <!DOCTYPE html>
@@ -77,14 +83,45 @@ String buildHtml() {
             color: #666;
             font-size: 14px;
         }
+        .button-row {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        button {
+            padding: 12px 18px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            background: #4CAF50;
+            color: white;
+        }
+        button:hover {
+            opacity: 0.9;
+        }
+        #status {
+            margin-top: 10px;
+            color: #333;
+            font-weight: bold;
+        }
     </style>
 </head>
 <body>
     <h1>ESP32 Roboterarm</h1>
+
     <div class="card">
         <p><strong>Netzwerk:</strong> AP_NAME</p>
         <p><strong>IP-Adresse:</strong> IP_PLACEHOLDER</p>
         <p class="hint">Die Servos folgen den Schiebern weich in Echtzeit.</p>
+    </div>
+
+    <div class="card">
+        <div class="button-row">
+            <button onclick="savePreset()">Preset speichern</button>
+            <button onclick="loadPreset()">Preset laden</button>
+        </div>
+        <div id="status">Status: bereit</div>
     </div>
 
     <div class="card">
@@ -104,9 +141,52 @@ String buildHtml() {
             sendTimers[servoId] = setTimeout(() => {
                 fetch(`/set?servo=${servoId}&angle=${value}`)
                     .then(response => response.text())
-                    .then(text => console.log(text))
-                    .catch(error => console.error(error));
+                    .then(text => {
+                        console.log(text);
+                        document.getElementById("status").innerText = "Status: " + text;
+                    })
+                    .catch(error => {
+                        console.error(error);
+                        document.getElementById("status").innerText = "Status: Fehler bei der Übertragung";
+                    });
             }, 10);
+        }
+
+        function savePreset() {
+            fetch('/save')
+                .then(response => response.text())
+                .then(text => {
+                    document.getElementById("status").innerText = "Status: " + text;
+                })
+                .catch(error => {
+                    console.error(error);
+                    document.getElementById("status").innerText = "Status: Fehler beim Speichern";
+                });
+        }
+
+        function loadPreset() {
+            fetch('/load')
+                .then(response => response.text())
+                .then(text => {
+                    document.getElementById("status").innerText = "Status: " + text;
+                    refreshSliderValues();
+                })
+                .catch(error => {
+                    console.error(error);
+                    document.getElementById("status").innerText = "Status: Fehler beim Laden";
+                });
+        }
+
+        function refreshSliderValues() {
+            fetch('/positions')
+                .then(response => response.json())
+                .then(data => {
+                    for (let i = 0; i < data.length; i++) {
+                        document.getElementById("servo" + i).value = data[i];
+                        document.getElementById("value" + i).innerText = data[i];
+                    }
+                })
+                .catch(error => console.error(error));
         }
     </script>
 </body>
@@ -144,6 +224,9 @@ String buildHtml() {
     return html;
 }
 
+// -------------------------
+// Servo-Funktionen
+// -------------------------
 void setServoTarget(int servoId, int angle) {
     if (servoId < 0 || servoId >= 6) {
         return;
@@ -183,6 +266,23 @@ void updateServosSmoothly() {
     }
 }
 
+void savePreset() {
+    for (int i = 0; i < 6; i++) {
+        preset[i] = servoPositions[i];
+    }
+    Serial.println("Preset gespeichert!");
+}
+
+void loadPreset() {
+    for (int i = 0; i < 6; i++) {
+        servoTargets[i] = preset[i];
+    }
+    Serial.println("Preset geladen!");
+}
+
+// -------------------------
+// Webserver-Handler
+// -------------------------
 void handleRoot() {
     server.send(200, "text/html", buildHtml());
 }
@@ -207,10 +307,35 @@ void handleSetServo() {
     server.send(200, "text/plain", response);
 }
 
+void handleSavePreset() {
+    savePreset();
+    server.send(200, "text/plain", "Preset gespeichert");
+}
+
+void handleLoadPreset() {
+    loadPreset();
+    server.send(200, "text/plain", "Preset geladen");
+}
+
+void handlePositions() {
+    String json = "[";
+    for (int i = 0; i < 6; i++) {
+        json += String(servoTargets[i]);
+        if (i < 5) {
+            json += ",";
+        }
+    }
+    json += "]";
+    server.send(200, "application/json", json);
+}
+
 void handleNotFound() {
     server.send(404, "text/plain", "Seite nicht gefunden");
 }
 
+// -------------------------
+// Setup
+// -------------------------
 void setup() {
     Serial.begin(115200);
     delay(1000);
@@ -233,9 +358,11 @@ void setup() {
         servos[i].setPeriodHertz(50);
         servos[i].attach(servoPins[i], 500, 2400);
 
+        // Grundstellung 90 Grad
         servoPositions[i] = 90;
         servoTargets[i] = 90;
 
+        // Begrenzungen beachten
         servoPositions[i] = constrain(servoPositions[i], servoMin[i], servoMax[i]);
         servoTargets[i] = constrain(servoTargets[i], servoMin[i], servoMax[i]);
 
@@ -252,12 +379,18 @@ void setup() {
 
     server.on("/", handleRoot);
     server.on("/set", handleSetServo);
+    server.on("/save", handleSavePreset);
+    server.on("/load", handleLoadPreset);
+    server.on("/positions", handlePositions);
     server.onNotFound(handleNotFound);
     server.begin();
 
     Serial.println("Webserver gestartet!");
 }
 
+// -------------------------
+// Loop
+// -------------------------
 void loop() {
     server.handleClient();
     updateServosSmoothly();
