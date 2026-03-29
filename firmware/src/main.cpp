@@ -14,8 +14,12 @@ const int servoPins[6] = {13, 12, 14, 27, 26, 25};
 int servoPositions[6] = {90, 90, 90, 90, 90, 90};
 int servoTargets[6]   = {90, 90, 90, 90, 90, 90};
 
-// Preset-Speicher
-int preset[6] = {90, 90, 90, 90, 90, 90};
+// 3 Presets mit je 6 Servos
+int presets[3][6] = {
+    {90, 90, 90, 90, 90, 90},
+    {90, 90, 90, 90, 90, 90},
+    {90, 90, 90, 90, 90, 90}
+};
 
 // Grenzen
 const int servoMin[6] = {0, 0, 0, 20, 0, 50};
@@ -87,6 +91,7 @@ String buildHtml() {
             display: flex;
             gap: 10px;
             flex-wrap: wrap;
+            margin-bottom: 10px;
         }
         button {
             padding: 12px 18px;
@@ -118,8 +123,16 @@ String buildHtml() {
 
     <div class="card">
         <div class="button-row">
-            <button onclick="savePreset()">Preset speichern</button>
-            <button onclick="loadPreset()">Preset laden</button>
+            <button onclick="savePreset(0)">Preset 1 speichern</button>
+            <button onclick="loadPreset(0)">Preset 1 laden</button>
+        </div>
+        <div class="button-row">
+            <button onclick="savePreset(1)">Preset 2 speichern</button>
+            <button onclick="loadPreset(1)">Preset 2 laden</button>
+        </div>
+        <div class="button-row">
+            <button onclick="savePreset(2)">Preset 3 speichern</button>
+            <button onclick="loadPreset(2)">Preset 3 laden</button>
         </div>
         <div id="status">Status: bereit</div>
     </div>
@@ -142,7 +155,6 @@ String buildHtml() {
                 fetch(`/set?servo=${servoId}&angle=${value}`)
                     .then(response => response.text())
                     .then(text => {
-                        console.log(text);
                         document.getElementById("status").innerText = "Status: " + text;
                     })
                     .catch(error => {
@@ -152,8 +164,8 @@ String buildHtml() {
             }, 10);
         }
 
-        function savePreset() {
-            fetch('/save')
+        function savePreset(index) {
+            fetch(`/save?preset=${index}`)
                 .then(response => response.text())
                 .then(text => {
                     document.getElementById("status").innerText = "Status: " + text;
@@ -164,8 +176,8 @@ String buildHtml() {
                 });
         }
 
-        function loadPreset() {
-            fetch('/load')
+        function loadPreset(index) {
+            fetch(`/load?preset=${index}`)
                 .then(response => response.text())
                 .then(text => {
                     document.getElementById("status").innerText = "Status: " + text;
@@ -266,18 +278,32 @@ void updateServosSmoothly() {
     }
 }
 
-void savePreset() {
-    for (int i = 0; i < 6; i++) {
-        preset[i] = servoPositions[i];
+void savePreset(int presetIndex) {
+    if (presetIndex < 0 || presetIndex >= 3) {
+        return;
     }
-    Serial.println("Preset gespeichert!");
+
+    for (int i = 0; i < 6; i++) {
+        presets[presetIndex][i] = servoPositions[i];
+    }
+
+    Serial.print("Preset ");
+    Serial.print(presetIndex + 1);
+    Serial.println(" gespeichert!");
 }
 
-void loadPreset() {
-    for (int i = 0; i < 6; i++) {
-        servoTargets[i] = preset[i];
+void loadPreset(int presetIndex) {
+    if (presetIndex < 0 || presetIndex >= 3) {
+        return;
     }
-    Serial.println("Preset geladen!");
+
+    for (int i = 0; i < 6; i++) {
+        servoTargets[i] = presets[presetIndex][i];
+    }
+
+    Serial.print("Preset ");
+    Serial.print(presetIndex + 1);
+    Serial.println(" geladen!");
 }
 
 // -------------------------
@@ -308,13 +334,37 @@ void handleSetServo() {
 }
 
 void handleSavePreset() {
-    savePreset();
-    server.send(200, "text/plain", "Preset gespeichert");
+    if (!server.hasArg("preset")) {
+        server.send(400, "text/plain", "Fehlender Preset-Parameter");
+        return;
+    }
+
+    int presetIndex = server.arg("preset").toInt();
+
+    if (presetIndex < 0 || presetIndex >= 3) {
+        server.send(400, "text/plain", "Ungueltiger Preset-Index");
+        return;
+    }
+
+    savePreset(presetIndex);
+    server.send(200, "text/plain", "Preset " + String(presetIndex + 1) + " gespeichert");
 }
 
 void handleLoadPreset() {
-    loadPreset();
-    server.send(200, "text/plain", "Preset geladen");
+    if (!server.hasArg("preset")) {
+        server.send(400, "text/plain", "Fehlender Preset-Parameter");
+        return;
+    }
+
+    int presetIndex = server.arg("preset").toInt();
+
+    if (presetIndex < 0 || presetIndex >= 3) {
+        server.send(400, "text/plain", "Ungueltiger Preset-Index");
+        return;
+    }
+
+    loadPreset(presetIndex);
+    server.send(200, "text/plain", "Preset " + String(presetIndex + 1) + " geladen");
 }
 
 void handlePositions() {
@@ -358,11 +408,9 @@ void setup() {
         servos[i].setPeriodHertz(50);
         servos[i].attach(servoPins[i], 500, 2400);
 
-        // Grundstellung 90 Grad
         servoPositions[i] = 90;
         servoTargets[i] = 90;
 
-        // Begrenzungen beachten
         servoPositions[i] = constrain(servoPositions[i], servoMin[i], servoMax[i]);
         servoTargets[i] = constrain(servoTargets[i], servoMin[i], servoMax[i]);
 
