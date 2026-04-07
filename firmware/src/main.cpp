@@ -2,17 +2,17 @@
 #include <ESP32Servo.h>
 #include <WebServer.h>
 #include <WiFi.h>
+#include <vector>
 
 namespace {
 
 constexpr uint8_t kServoCount = 6;
-constexpr uint8_t kPresetCount = 3;
 constexpr uint16_t kHttpPort = 80;
 constexpr uint32_t kServoStepDelayMs = 15;
 constexpr int kServoStepSize = 1;
 constexpr uint32_t kHoldStepDelayMs = 80;
 constexpr int kHoldStepSize = 2;
-constexpr uint32_t kSequenceStepDelayMs = 3000;
+constexpr uint32_t kSequenceHoldMs = 1000;
 constexpr uint16_t kServoPulseMinUs = 500;
 constexpr uint16_t kServoPulseMaxUs = 2400;
 constexpr uint16_t kSerialBaudRate = 115200;
@@ -32,10 +32,9 @@ constexpr int kServoPins[kServoCount] = {13, 12, 14, 27, 26, 25};
 constexpr int kServoMin[kServoCount] = {0, 0, 0, 20, 0, 50};
 constexpr int kServoMax[kServoCount] = {180, 180, 180, 160, 180, 125};
 constexpr int kServoHome[kServoCount] = {18, 90, 180, 96, 0, 90};
-constexpr int kPresets[kPresetCount][kServoCount] = {
-    {90, 90, 90, 90, 90, 90},
-    {110, 60, 120, 70, 120, 80},
-    {70, 120, 60, 140, 60, 110},
+
+struct SequenceStep {
+    int positions[kServoCount];
 };
 
 const char kHtmlHeader[] PROGMEM = R"rawliteral(
@@ -99,9 +98,21 @@ button {
     background-color: #007bff;
     width: 200px;
 }
+.record {
+    background-color: #6f42c1;
+    width: 200px;
+}
+.clear {
+    background-color: #fd7e14;
+    width: 200px;
+}
 .home {
     background-color: #ff8c00;
     width: 200px;
+}
+.status {
+    font-size: 18px;
+    margin-top: 12px;
 }
 </style>
 </head>
@@ -109,8 +120,11 @@ button {
 <h1>ESP32 Roboterarm</h1>
 <div class="card">
     <button class="home" onclick="moveHome()">Grundstellung</button><br><br>
-    <button class="seq" onclick="startSequence()">Sequenz starten</button><br><br>
+    <button class="record" onclick="recordPosition()">Position speichern</button><br><br>
+    <button class="seq" onclick="playSequence()">Sequenz abspielen</button><br><br>
+    <button class="clear" onclick="clearSequence()">Sequenz löschen</button><br><br>
     <button class="stop" onclick="stopSequence()">STOP</button>
+    <div class="status" id="sequenceStatus">Gespeicherte Positionen: 0</div>
 </div>
 )rawliteral";
 
@@ -142,8 +156,30 @@ document.addEventListener("mouseup", handleGlobalStop);
 document.addEventListener("touchend", handleGlobalStop);
 document.addEventListener("touchcancel", handleGlobalStop);
 
-function startSequence() {
-    fetch("/sequence");
+function recordPosition() {
+    fetch("/record")
+        .then((res) => res.text())
+        .then(() => refreshSequenceStatus())
+        .catch((err) => console.error("Fehler bei /record:", err));
+}
+
+function playSequence() {
+    fetch("/playSequence")
+        .then((res) => {
+            if (!res.ok) {
+                return res.text().then((text) => Promise.reject(new Error(text)));
+            }
+            return res.text();
+        })
+        .then(() => refreshSequenceStatus())
+        .catch((err) => console.error("Fehler bei /playSequence:", err));
+}
+
+function clearSequence() {
+    fetch("/clearSequence")
+        .then((res) => res.text())
+        .then(() => refreshSequenceStatus())
+        .catch((err) => console.error("Fehler bei /clearSequence:", err));
 }
 
 function moveHome() {
@@ -151,7 +187,20 @@ function moveHome() {
 }
 
 function stopSequence() {
-    fetch("/stop");
+    fetch("/stop")
+        .then((res) => res.text())
+        .then(() => refreshSequenceStatus())
+        .catch((err) => console.error("Fehler bei /stop:", err));
+}
+
+function refreshSequenceStatus() {
+    fetch("/sequenceStatus")
+        .then((res) => res.json())
+        .then((data) => {
+            document.getElementById("sequenceStatus").innerText =
+                `Gespeicherte Positionen: ${data.count} | Wiedergabe: ${data.playing ? "aktiv" : "bereit"}`;
+        })
+        .catch((err) => console.error("Fehler bei /sequenceStatus:", err));
 }
 
 function refreshPositions() {
@@ -168,6 +217,8 @@ function refreshPositions() {
 
 setInterval(refreshPositions, 300);
 refreshPositions();
+setInterval(refreshSequenceStatus, 500);
+refreshSequenceStatus();
 </script>
 </body>
 </html>
@@ -178,11 +229,12 @@ Servo servos[kServoCount];
 int servoPositions[kServoCount] = {90, 90, 90, 90, 90, 90};
 int servoTargets[kServoCount] = {90, 90, 90, 90, 90, 90};
 int servoMoveDirection[kServoCount] = {0};
-bool sequenceRunning = false;
-uint8_t sequenceStep = 0;
+std::vector<SequenceStep> recordedSequence;
+bool sequencePlaying = false;
+size_t sequenceIndex = 0;
 unsigned long lastServoUpdate = 0;
 unsigned long lastHoldUpdate = 0;
-unsigned long lastStepTime = 0;
+unsigned long sequenceStepReachedAt = 0;
 
 bool parseServoId(uint8_t &servoId) {
     if (!server.hasArg("servo")) {
@@ -222,10 +274,33 @@ void setServoTarget(uint8_t id, int angle) {
     servoTargets[id] = constrain(angle, kServoMin[id], kServoMax[id]);
 }
 
-void loadPreset(uint8_t presetIndex) {
+void recordCurrentPosition() {
+    SequenceStep step = {};
     for (uint8_t i = 0; i < kServoCount; i++) {
-        setServoTarget(i, kPresets[presetIndex][i]);
+        step.positions[i] = servoPositions[i];
     }
+    recordedSequence.push_back(step);
+}
+
+void applySequenceStep(size_t index) {
+    if (index >= recordedSequence.size()) {
+        return;
+    }
+
+    for (uint8_t i = 0; i < kServoCount; i++) {
+        setServoTarget(i, recordedSequence[index].positions[i]);
+        servoMoveDirection[i] = 0;
+    }
+    sequenceStepReachedAt = 0;
+}
+
+bool allServosAtTarget() {
+    for (uint8_t i = 0; i < kServoCount; i++) {
+        if (servoPositions[i] != servoTargets[i]) {
+            return false;
+        }
+    }
+    return true;
 }
 
 void moveToHomePosition() {
@@ -265,20 +340,24 @@ void sendServoCard(uint8_t servoId) {
 }
 
 void stopSequenceInternal() {
-    sequenceRunning = false;
+    sequencePlaying = false;
+    sequenceIndex = 0;
+    sequenceStepReachedAt = 0;
     for (uint8_t i = 0; i < kServoCount; i++) {
         servoTargets[i] = servoPositions[i];
         servoMoveDirection[i] = 0;
     }
 }
 
-void startSequenceInternal() {
+void startRecordedSequenceInternal() {
     stopSequenceInternal();
-    sequenceRunning = true;
-    sequenceStep = 0;
-    loadPreset(sequenceStep);
-    sequenceStep++;
-    lastStepTime = millis();
+    if (recordedSequence.empty()) {
+        return;
+    }
+
+    sequencePlaying = true;
+    sequenceIndex = 0;
+    applySequenceStep(sequenceIndex);
 }
 
 void updateHeldButtons() {
@@ -311,18 +390,33 @@ void updateServosSmoothly() {
 }
 
 void updateSequence() {
-    if (!sequenceRunning || millis() - lastStepTime < kSequenceStepDelayMs) {
+    if (!sequencePlaying) {
         return;
     }
 
-    lastStepTime = millis();
-    if (sequenceStep < kPresetCount) {
-        loadPreset(sequenceStep);
-        sequenceStep++;
+    if (!allServosAtTarget()) {
+        sequenceStepReachedAt = 0;
         return;
     }
 
-    sequenceRunning = false;
+    if (sequenceStepReachedAt == 0) {
+        sequenceStepReachedAt = millis();
+        return;
+    }
+
+    if (millis() - sequenceStepReachedAt < kSequenceHoldMs) {
+        return;
+    }
+
+    sequenceIndex++;
+    if (sequenceIndex >= recordedSequence.size()) {
+        sequencePlaying = false;
+        sequenceIndex = 0;
+        sequenceStepReachedAt = 0;
+        return;
+    }
+
+    applySequenceStep(sequenceIndex);
 }
 
 void handleRoot() {
@@ -342,7 +436,7 @@ void handleStartMove() {
         return;
     }
 
-    sequenceRunning = false;
+    sequencePlaying = false;
     servoMoveDirection[servoId] = direction;
     server.send(200, "text/plain", "move start");
 }
@@ -358,9 +452,20 @@ void handleStopMove() {
     server.send(200, "text/plain", "move stop");
 }
 
-void handleSequence() {
-    startSequenceInternal();
-    server.send(200, "text/plain", "sequence");
+void handleRecord() {
+    stopSequenceInternal();
+    recordCurrentPosition();
+    server.send(200, "text/plain", "recorded");
+}
+
+void handlePlaySequence() {
+    if (recordedSequence.empty()) {
+        server.send(400, "text/plain", "no recorded sequence");
+        return;
+    }
+
+    startRecordedSequenceInternal();
+    server.send(200, "text/plain", "play sequence");
 }
 
 void handleHome() {
@@ -373,6 +478,23 @@ void handleHome() {
 void handleStop() {
     stopSequenceInternal();
     server.send(200, "text/plain", "stop");
+}
+
+void handleClearSequence() {
+    stopSequenceInternal();
+    recordedSequence.clear();
+    server.send(200, "text/plain", "clear");
+}
+
+void handleSequenceStatus() {
+    char json[96];
+    snprintf(
+        json,
+        sizeof(json),
+        "{\"count\":%u,\"playing\":%s}",
+        static_cast<unsigned>(recordedSequence.size()),
+        sequencePlaying ? "true" : "false");
+    server.send(200, "application/json", json);
 }
 
 void handlePositions() {
@@ -406,7 +528,10 @@ void setup() {
     server.on("/", handleRoot);
     server.on("/startMove", handleStartMove);
     server.on("/stopMove", handleStopMove);
-    server.on("/sequence", handleSequence);
+    server.on("/record", handleRecord);
+    server.on("/playSequence", handlePlaySequence);
+    server.on("/clearSequence", handleClearSequence);
+    server.on("/sequenceStatus", handleSequenceStatus);
     server.on("/home", handleHome);
     server.on("/stop", handleStop);
     server.on("/positions", handlePositions);
