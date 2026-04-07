@@ -31,7 +31,7 @@ constexpr char kApPassword[] = ROBOT_ARM_AP_PASSWORD;
 constexpr int kServoPins[kServoCount] = {13, 12, 14, 27, 26, 25};
 constexpr int kServoMin[kServoCount] = {0, 0, 0, 20, 0, 50};
 constexpr int kServoMax[kServoCount] = {180, 180, 180, 160, 180, 125};
-constexpr int kServoHome[kServoCount] = {90, 90, 90, 90, 90, 90};
+constexpr int kServoHome[kServoCount] = {18, 90, 180, 96, 0, 90};
 constexpr int kPresets[kPresetCount][kServoCount] = {
     {90, 90, 90, 90, 90, 90},
     {110, 60, 120, 70, 120, 80},
@@ -99,11 +99,16 @@ button {
     background-color: #007bff;
     width: 200px;
 }
+.home {
+    background-color: #ff8c00;
+    width: 200px;
+}
 </style>
 </head>
 <body>
 <h1>ESP32 Roboterarm</h1>
 <div class="card">
+    <button class="home" onclick="moveHome()">Grundstellung</button><br><br>
     <button class="seq" onclick="startSequence()">Sequenz starten</button><br><br>
     <button class="stop" onclick="stopSequence()">STOP</button>
 </div>
@@ -127,12 +132,22 @@ function stopAll() {
     }
 }
 
-document.addEventListener("mouseup", stopAll);
-document.addEventListener("touchend", stopAll);
-document.addEventListener("touchcancel", stopAll);
+function handleGlobalStop(event) {
+    if (event.target.closest(".minus, .plus")) {
+        stopAll();
+    }
+}
+
+document.addEventListener("mouseup", handleGlobalStop);
+document.addEventListener("touchend", handleGlobalStop);
+document.addEventListener("touchcancel", handleGlobalStop);
 
 function startSequence() {
     fetch("/sequence");
+}
+
+function moveHome() {
+    fetch("/home");
 }
 
 function stopSequence() {
@@ -210,6 +225,13 @@ void setServoTarget(uint8_t id, int angle) {
 void loadPreset(uint8_t presetIndex) {
     for (uint8_t i = 0; i < kServoCount; i++) {
         setServoTarget(i, kPresets[presetIndex][i]);
+    }
+}
+
+void moveToHomePosition() {
+    for (uint8_t i = 0; i < kServoCount; i++) {
+        setServoTarget(i, kServoHome[i]);
+        servoMoveDirection[i] = 0;
     }
 }
 
@@ -341,6 +363,13 @@ void handleSequence() {
     server.send(200, "text/plain", "sequence");
 }
 
+void handleHome() {
+    stopSequenceInternal();
+    moveToHomePosition();
+    Serial.println("Grundstellung angefahren");
+    server.send(200, "text/plain", "home");
+}
+
 void handleStop() {
     stopSequenceInternal();
     server.send(200, "text/plain", "stop");
@@ -378,6 +407,7 @@ void setup() {
     server.on("/startMove", handleStartMove);
     server.on("/stopMove", handleStopMove);
     server.on("/sequence", handleSequence);
+    server.on("/home", handleHome);
     server.on("/stop", handleStop);
     server.on("/positions", handlePositions);
     server.begin();
