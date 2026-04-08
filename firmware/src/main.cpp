@@ -114,6 +114,41 @@ button {
     font-size: 18px;
     margin-top: 12px;
 }
+.sequence-list {
+    text-align: left;
+    margin-top: 16px;
+}
+.sequence-list h2 {
+    font-size: 20px;
+    margin: 0 0 12px;
+    text-align: center;
+}
+.sequence-empty {
+    color: #666;
+    text-align: center;
+    margin: 0;
+}
+.sequence-step {
+    border: 1px solid #e0e0e0;
+    border-radius: 10px;
+    padding: 12px;
+    margin-bottom: 10px;
+    background: #fafafa;
+}
+.sequence-step.active {
+    border-color: #007bff;
+    background: #eaf4ff;
+}
+.sequence-step-title {
+    font-weight: bold;
+    margin-bottom: 8px;
+}
+.sequence-step-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+    gap: 6px 12px;
+    font-size: 15px;
+}
 </style>
 </head>
 <body>
@@ -125,12 +160,19 @@ button {
     <button class="clear" onclick="clearSequence()">Sequenz löschen</button><br><br>
     <button class="stop" onclick="stopSequence()">STOP</button>
     <div class="status" id="sequenceStatus">Gespeicherte Positionen: 0</div>
+    <div class="sequence-list">
+        <h2>Gespeicherte Sequenz</h2>
+        <div id="sequenceList">
+            <p class="sequence-empty">Noch keine Positionen gespeichert.</p>
+        </div>
+    </div>
 </div>
 )rawliteral";
 
 const char kHtmlFooter[] PROGMEM = R"rawliteral(
 <script>
 const SERVO_COUNT = 6;
+let renderedSequenceCount = 0;
 
 function startMove(id, dir) {
     fetch(`/startMove?servo=${id}&dir=${dir}`);
@@ -159,7 +201,7 @@ document.addEventListener("touchcancel", handleGlobalStop);
 function recordPosition() {
     fetch("/record")
         .then((res) => res.text())
-        .then(() => refreshSequenceStatus())
+        .then(() => refreshSequenceData())
         .catch((err) => console.error("Fehler bei /record:", err));
 }
 
@@ -171,34 +213,88 @@ function playSequence() {
             }
             return res.text();
         })
-        .then(() => refreshSequenceStatus())
+        .then(() => refreshSequenceData())
         .catch((err) => console.error("Fehler bei /playSequence:", err));
 }
 
 function clearSequence() {
     fetch("/clearSequence")
         .then((res) => res.text())
-        .then(() => refreshSequenceStatus())
+        .then(() => refreshSequenceData())
         .catch((err) => console.error("Fehler bei /clearSequence:", err));
 }
 
 function moveHome() {
-    fetch("/home");
+    fetch("/home")
+        .then(() => refreshSequenceData())
+        .catch((err) => console.error("Fehler bei /home:", err));
 }
 
 function stopSequence() {
     fetch("/stop")
         .then((res) => res.text())
-        .then(() => refreshSequenceStatus())
+        .then(() => refreshSequenceData())
         .catch((err) => console.error("Fehler bei /stop:", err));
+}
+
+function renderSequenceList(data) {
+    const list = document.getElementById("sequenceList");
+    renderedSequenceCount = data.count;
+    if (!data.steps.length) {
+        list.innerHTML = '<p class="sequence-empty">Noch keine Positionen gespeichert.</p>';
+        return;
+    }
+
+    list.innerHTML = data.steps.map((step, index) => {
+        const positions = step.map((value, servoIndex) =>
+            `<div>Servo ${servoIndex}: ${value}${String.fromCharCode(176)}</div>`
+        ).join("");
+        const activeClass = data.currentStep === index ? " active" : "";
+        const stateLabel = data.currentStep === index ? " (aktiv)" : "";
+        return `
+            <div class="sequence-step${activeClass}" data-step-index="${index}">
+                <div class="sequence-step-title">Schritt ${index + 1}${stateLabel}</div>
+                <div class="sequence-step-grid">${positions}</div>
+            </div>
+        `;
+    }).join("");
+}
+
+function updateSequenceStatus(data) {
+    document.getElementById("sequenceStatus").innerText =
+        `Gespeicherte Positionen: ${data.count} | Wiedergabe: ${data.playing ? "aktiv" : "bereit"}`;
+}
+
+function setActiveSequenceStep(currentStep) {
+    const steps = document.querySelectorAll(".sequence-step");
+    steps.forEach((step) => {
+        const index = Number(step.dataset.stepIndex);
+        const title = step.querySelector(".sequence-step-title");
+        const isActive = index === currentStep;
+        step.classList.toggle("active", isActive);
+        title.innerText = `Schritt ${index + 1}${isActive ? " (aktiv)" : ""}`;
+    });
+}
+
+function refreshSequenceData() {
+    return fetch("/sequenceData")
+        .then((res) => res.json())
+        .then((data) => {
+            updateSequenceStatus(data);
+            renderSequenceList(data);
+        })
+        .catch((err) => console.error("Fehler bei /sequenceData:", err));
 }
 
 function refreshSequenceStatus() {
     fetch("/sequenceStatus")
         .then((res) => res.json())
         .then((data) => {
-            document.getElementById("sequenceStatus").innerText =
-                `Gespeicherte Positionen: ${data.count} | Wiedergabe: ${data.playing ? "aktiv" : "bereit"}`;
+            updateSequenceStatus(data);
+            setActiveSequenceStep(data.currentStep);
+            if (data.count !== renderedSequenceCount) {
+                return refreshSequenceData();
+            }
         })
         .catch((err) => console.error("Fehler bei /sequenceStatus:", err));
 }
@@ -218,7 +314,7 @@ function refreshPositions() {
 setInterval(refreshPositions, 300);
 refreshPositions();
 setInterval(refreshSequenceStatus, 500);
-refreshSequenceStatus();
+refreshSequenceData();
 </script>
 </body>
 </html>
@@ -488,13 +584,52 @@ void handleClearSequence() {
 
 void handleSequenceStatus() {
     char json[96];
+    const int currentStep = sequencePlaying ? static_cast<int>(sequenceIndex) : -1;
     snprintf(
         json,
         sizeof(json),
-        "{\"count\":%u,\"playing\":%s}",
+        "{\"count\":%u,\"playing\":%s,\"currentStep\":%d}",
         static_cast<unsigned>(recordedSequence.size()),
-        sequencePlaying ? "true" : "false");
+        sequencePlaying ? "true" : "false",
+        currentStep);
     server.send(200, "application/json", json);
+}
+
+void handleSequenceData() {
+    server.setContentLength(CONTENT_LENGTH_UNKNOWN);
+    server.send(200, "application/json", "");
+
+    char header[96];
+    const int currentStep = sequencePlaying ? static_cast<int>(sequenceIndex) : -1;
+    snprintf(
+        header,
+        sizeof(header),
+        "{\"count\":%u,\"playing\":%s,\"currentStep\":%d,\"steps\":[",
+        static_cast<unsigned>(recordedSequence.size()),
+        sequencePlaying ? "true" : "false",
+        currentStep);
+    server.sendContent(header);
+
+    for (size_t stepIndex = 0; stepIndex < recordedSequence.size(); stepIndex++) {
+        if (stepIndex > 0) {
+            server.sendContent(",");
+        }
+
+        char row[64];
+        snprintf(
+            row,
+            sizeof(row),
+            "[%d,%d,%d,%d,%d,%d]",
+            recordedSequence[stepIndex].positions[0],
+            recordedSequence[stepIndex].positions[1],
+            recordedSequence[stepIndex].positions[2],
+            recordedSequence[stepIndex].positions[3],
+            recordedSequence[stepIndex].positions[4],
+            recordedSequence[stepIndex].positions[5]);
+        server.sendContent(row);
+    }
+
+    server.sendContent("]}");
 }
 
 void handlePositions() {
@@ -532,6 +667,7 @@ void setup() {
     server.on("/playSequence", handlePlaySequence);
     server.on("/clearSequence", handleClearSequence);
     server.on("/sequenceStatus", handleSequenceStatus);
+    server.on("/sequenceData", handleSequenceData);
     server.on("/home", handleHome);
     server.on("/stop", handleStop);
     server.on("/positions", handlePositions);
