@@ -1,0 +1,119 @@
+body {
+    font-family: Arial, sans-serif;
+    text-align: center;
+    background: #f4f4f4;
+    margin: 0;
+    padding: 20px 12px 40px;
+}
+h1 {
+    margin-bottom: 20px;
+}
+.card {
+    background: white;
+    padding: 15px;
+    margin: 10px auto;
+    border-radius: 10px;
+    width: min(90%, 500px);
+    box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+}
+.servo-row {
+    margin-bottom: 15px;
+}
+.value {
+    font-size: 20px;
+    font-weight: bold;
+    margin-bottom: 10px;
+}
+.speed-control {
+    margin-bottom: 12px;
+}
+.speed-label {
+    display: block;
+    font-size: 14px;
+    margin-bottom: 6px;
+}
+.speed-slider {
+    width: 100%;
+}
+.button-group {
+    display: flex;
+    justify-content: center;
+    gap: 20px;
+}
+button {
+    width: 100px;
+    height: 70px;
+    font-size: 28px;
+    border: none;
+    border-radius: 12px;
+    color: white;
+}
+.plus {
+    background-color: #28a745;
+}
+.minus {
+    background-color: #dc3545;
+}
+.stop {
+    background-color: black;
+    width: 150px;
+}
+.seq {
+    background-color: #007bff;
+    width: 200px;
+}
+.record {
+    background-color: #6f42c1;
+    width: 200px;
+}
+.clear {
+    background-color: #fd7e14;
+    width: 200px;
+}
+.overwrite {
+    background-color: #17a2b8;
+    width: 200px;
+}
+.home {
+    background-color: #ff8c00;
+    width: 200px;
+}
+.status {
+    font-size: 18px;
+    margin-top: 12px;
+}
+.sequence-list {
+    text-align: left;
+    margin-top: 16px;
+}
+.sequence-list h2 {
+    font-size: 20px;
+    margin: 0 0 12px;
+    text-align: center;
+}
+.sequence-empty {
+    color: #666;
+    text-align: center;
+    margin: 0;
+}
+.sequence-step {
+    border: 1px solid #e0e0e0;
+    border-radius: 10px;
+    padding: 12px;
+    margin-bottom: 10px;
+    background: #fafafa;
+}
+.sequence-step.active {
+    border-color: #007bff;
+    background: #eaf4ff;
+}
+.sequence-step-title {
+    font-weight: bold;
+    margin-bottom: 8px;
+}
+.sequence-step-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+    gap: 6px 12px;
+    font-size: 15px;
+}

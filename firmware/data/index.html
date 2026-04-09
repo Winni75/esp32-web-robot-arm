@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ESP32 Roboterarm</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<h1>ESP32 Roboterarm</h1>
+<div class="card">
+    <div class="servo-row">
+        <h3>Servo 0</h3>
+        <div class="value" id="val0">90°</div>
+        <div class="speed-control">
+            <label class="speed-label" for="speed0">Geschwindigkeit: <span id="speedVal0">5</span></label>
+            <input class="speed-slider" id="speed0" type="range" min="1" max="10" value="5" data-servo="0">
+        </div>
+        <div class="button-group">
+            <button class="minus" type="button" data-servo="0" data-dir="-1">-</button>
+            <button class="plus" type="button" data-servo="0" data-dir="1">+</button>
+        </div>
+    </div>
+</div>
+<div class="card">
+    <div class="servo-row">
+        <h3>Servo 1</h3>
+        <div class="value" id="val1">90°</div>
+        <div class="speed-control">
+            <label class="speed-label" for="speed1">Geschwindigkeit: <span id="speedVal1">5</span></label>
+            <input class="speed-slider" id="speed1" type="range" min="1" max="10" value="5" data-servo="1">
+        </div>
+        <div class="button-group">
+            <button class="minus" type="button" data-servo="1" data-dir="-1">-</button>
+            <button class="plus" type="button" data-servo="1" data-dir="1">+</button>
+        </div>
+    </div>
+</div>
+<div class="card">
+    <div class="servo-row">
+        <h3>Servo 2</h3>
+        <div class="value" id="val2">90°</div>
+        <div class="speed-control">
+            <label class="speed-label" for="speed2">Geschwindigkeit: <span id="speedVal2">5</span></label>
+            <input class="speed-slider" id="speed2" type="range" min="1" max="10" value="5" data-servo="2">
+        </div>
+        <div class="button-group">
+            <button class="minus" type="button" data-servo="2" data-dir="-1">-</button>
+            <button class="plus" type="button" data-servo="2" data-dir="1">+</button>
+        </div>
+    </div>
+</div>
+<div class="card">
+    <div class="servo-row">
+        <h3>Servo 3</h3>
+        <div class="value" id="val3">90°</div>
+        <div class="speed-control">
+            <label class="speed-label" for="speed3">Geschwindigkeit: <span id="speedVal3">5</span></label>
+            <input class="speed-slider" id="speed3" type="range" min="1" max="10" value="5" data-servo="3">
+        </div>
+        <div class="button-group">
+            <button class="minus" type="button" data-servo="3" data-dir="-1">-</button>
+            <button class="plus" type="button" data-servo="3" data-dir="1">+</button>
+        </div>
+    </div>
+</div>
+<div class="card">
+    <div class="servo-row">
+        <h3>Servo 4</h3>
+        <div class="value" id="val4">90°</div>
+        <div class="speed-control">
+            <label class="speed-label" for="speed4">Geschwindigkeit: <span id="speedVal4">5</span></label>
+            <input class="speed-slider" id="speed4" type="range" min="1" max="10" value="5" data-servo="4">
+        </div>
+        <div class="button-group">
+            <button class="minus" type="button" data-servo="4" data-dir="-1">-</button>
+            <button class="plus" type="button" data-servo="4" data-dir="1">+</button>
+        </div>
+    </div>
+</div>
+<div class="card">
+    <div class="servo-row">
+        <h3>Servo 5</h3>
+        <div class="value" id="val5">90°</div>
+        <div class="speed-control">
+            <label class="speed-label" for="speed5">Geschwindigkeit: <span id="speedVal5">5</span></label>
+            <input class="speed-slider" id="speed5" type="range" min="1" max="10" value="5" data-servo="5">
+        </div>
+        <div class="button-group">
+            <button class="minus" type="button" data-servo="5" data-dir="-1">-</button>
+            <button class="plus" type="button" data-servo="5" data-dir="1">+</button>
+        </div>
+    </div>
+</div>
+<div class="card">
+    <button class="home" onclick="moveHome()">Grundstellung</button><br><br>
+    <button class="record" onclick="recordPosition()">Position speichern</button><br><br>
+    <button class="overwrite" onclick="overwriteSequence()">Sequenz überschreiben</button><br><br>
+    <button class="seq" onclick="playSequence()">Sequenz abspielen</button><br><br>
+    <button class="clear" onclick="clearSequence()">Sequenz löschen</button><br><br>
+    <button class="stop" onclick="stopSequence()">STOP</button>
+    <div class="status" id="sequenceStatus">Gespeicherte Positionen: 0</div>
+    <div class="sequence-list">
+        <h2>Gespeicherte Sequenz</h2>
+        <div id="sequenceList">
+            <p class="sequence-empty">Noch keine Positionen gespeichert.</p>
+        </div>
+    </div>
+</div>
+<script src="script.js"></script>
+</body>
+</html>
