@@ -249,46 +249,6 @@ void moveToHomePosition() {
     }
 }
 
-void sendServoCard(uint8_t servoId) {
-    char row[320];
-    snprintf(
-        row,
-        sizeof(row),
-        "<div class='card'><div class='servo-row'><h3>Servo %u</h3>"
-        "<div class='value' id='val%u'>%d&deg;</div>",
-        servoId,
-        servoId,
-        servoPositions[servoId]);
-    server.sendContent(row);
-
-    snprintf(
-        row,
-        sizeof(row),
-        "<div class='speed-control'><label class='speed-label' for='speed%u'>Geschwindigkeit: "
-        "<span id='speedVal%u'>%u</span></label>"
-        "<input class='speed-slider' id='speed%u' type='range' min='%u' max='%u' value='%u' "
-        "data-servo='%u'></div>",
-        servoId,
-        servoId,
-        servoSpeeds[servoId],
-        servoId,
-        kServoSpeedMin,
-        kServoSpeedMax,
-        servoSpeeds[servoId],
-        servoId);
-    server.sendContent(row);
-
-    snprintf(
-        row,
-        sizeof(row),
-        "<div class='button-group'>"
-        "<button class='minus' type='button' data-servo='%u' data-dir='-1'>-</button>"
-        "<button class='plus' type='button' data-servo='%u' data-dir='1'>+</button>"
-        "</div></div></div>",
-        servoId,
-        servoId);
-}
-
 void stopSequenceInternal() {
     sequencePlaying = false;
     sequenceIndex = 0;

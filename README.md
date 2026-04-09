@@ -17,7 +17,8 @@ The ESP32 acts as a **WiFi web server**, allowing the robotic arm to be controll
 # Project Structure
 
 * `firmware/` ESP32 source code
-* `web/` browser interface
+* `firmware/data/` HTML, CSS and JavaScript files served from LittleFS on the ESP32
+* `web/` browser prototypes and experiments
 * `docs/` technical documentation
 * `hardware/` wiring and hardware notes
 * `images/` screenshots and photos
@@ -32,7 +33,22 @@ The ESP32 acts as a **WiFi web server**, allowing the robotic arm to be controll
 * C++
 * Arduino Framework
 * HTML / CSS / JavaScript
+* LittleFS
 * REST-style API
+
+---
+
+# Firmware Upload
+
+The web interface is split into separate files in `firmware/data/` and is served from the ESP32 file system.
+
+After flashing the firmware, upload the LittleFS data partition as well:
+
+```powershell
+cd firmware
+pio run -t upload
+pio run -t uploadfs
+```
 
 ---
 
