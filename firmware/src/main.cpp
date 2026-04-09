@@ -1,5 +1,6 @@
 #include <Arduino.h>
 #include <ESP32Servo.h>
+#include <LittleFS.h>
 #include <Preferences.h>
 #include <WebServer.h>
 #include <WiFi.h>
@@ -42,376 +43,6 @@ constexpr int kServoHome[kServoCount] = {18, 90, 180, 96, 0, 90};
 struct SequenceStep {
     int positions[kServoCount];
 };
-
-const char kHtmlHeader[] PROGMEM = R"rawliteral(
-<!DOCTYPE html>
-<html lang="de">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ESP32 Roboterarm</title>
-<style>
-body {
-    font-family: Arial, sans-serif;
-    text-align: center;
-    background: #f4f4f4;
-    margin: 0;
-    padding: 20px 12px 40px;
-}
-h1 {
-    margin-bottom: 20px;
-}
-.card {
-    background: white;
-    padding: 15px;
-    margin: 10px auto;
-    border-radius: 10px;
-    width: min(90%, 500px);
-    box-shadow: 0 2px 6px rgba(0,0,0,0.1);
-}
-.servo-row {
-    margin-bottom: 15px;
-}
-.value {
-    font-size: 20px;
-    font-weight: bold;
-    margin-bottom: 10px;
-}
-.speed-control {
-    margin-bottom: 12px;
-}
-.speed-label {
-    display: block;
-    font-size: 14px;
-    margin-bottom: 6px;
-}
-.speed-slider {
-    width: 100%;
-}
-.button-group {
-    display: flex;
-    justify-content: center;
-    gap: 20px;
-}
-button {
-    width: 100px;
-    height: 70px;
-    font-size: 28px;
-    border: none;
-    border-radius: 12px;
-    color: white;
-}
-.plus {
-    background-color: #28a745;
-}
-.minus {
-    background-color: #dc3545;
-}
-.stop {
-    background-color: black;
-    width: 150px;
-}
-.seq {
-    background-color: #007bff;
-    width: 200px;
-}
-.record {
-    background-color: #6f42c1;
-    width: 200px;
-}
-.clear {
-    background-color: #fd7e14;
-    width: 200px;
-}
-.overwrite {
-    background-color: #17a2b8;
-    width: 200px;
-}
-.home {
-    background-color: #ff8c00;
-    width: 200px;
-}
-.status {
-    font-size: 18px;
-    margin-top: 12px;
-}
-.sequence-list {
-    text-align: left;
-    margin-top: 16px;
-}
-.sequence-list h2 {
-    font-size: 20px;
-    margin: 0 0 12px;
-    text-align: center;
-}
-.sequence-empty {
-    color: #666;
-    text-align: center;
-    margin: 0;
-}
-.sequence-step {
-    border: 1px solid #e0e0e0;
-    border-radius: 10px;
-    padding: 12px;
-    margin-bottom: 10px;
-    background: #fafafa;
-}
-.sequence-step.active {
-    border-color: #007bff;
-    background: #eaf4ff;
-}
-.sequence-step-title {
-    font-weight: bold;
-    margin-bottom: 8px;
-}
-.sequence-step-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
-    gap: 6px 12px;
-    font-size: 15px;
-}
-</style>
-</head>
-<body>
-<h1>ESP32 Roboterarm</h1>
-<div class="card">
-    <button class="home" onclick="moveHome()">Grundstellung</button><br><br>
-    <button class="record" onclick="recordPosition()">Position speichern</button><br><br>
-    <button class="overwrite" onclick="overwriteSequence()">Sequenz überschreiben</button><br><br>
-    <button class="seq" onclick="playSequence()">Sequenz abspielen</button><br><br>
-    <button class="clear" onclick="clearSequence()">Sequenz löschen</button><br><br>
-    <button class="stop" onclick="stopSequence()">STOP</button>
-    <div class="status" id="sequenceStatus">Gespeicherte Positionen: 0</div>
-    <div class="sequence-list">
-        <h2>Gespeicherte Sequenz</h2>
-        <div id="sequenceList">
-            <p class="sequence-empty">Noch keine Positionen gespeichert.</p>
-        </div>
-    </div>
-</div>
-)rawliteral";
-
-const char kHtmlFooter[] PROGMEM = R"rawliteral(
-<script>
-const SERVO_COUNT = 6;
-let renderedSequenceCount = 0;
-
-function startMove(id, dir) {
-    fetch(`/startMove?servo=${id}&dir=${dir}`);
-}
-
-function stopMove(id) {
-    fetch(`/stopMove?servo=${id}`);
-}
-
-function stopAll() {
-    for (let i = 0; i < SERVO_COUNT; i++) {
-        fetch(`/stopMove?servo=${i}`);
-    }
-}
-
-function recordPosition() {
-    fetch("/record")
-        .then((res) => res.text())
-        .then(() => refreshSequenceData())
-        .catch((err) => console.error("Fehler bei /record:", err));
-}
-
-function overwriteSequence() {
-    fetch("/overwriteSequence")
-        .then((res) => {
-            if (!res.ok) {
-                return res.text().then((text) => Promise.reject(new Error(text)));
-            }
-            return res.text();
-        })
-        .then(() => refreshSequenceData())
-        .catch((err) => console.error("Fehler bei /overwriteSequence:", err));
-}
-
-function playSequence() {
-    fetch("/playSequence")
-        .then((res) => {
-            if (!res.ok) {
-                return res.text().then((text) => Promise.reject(new Error(text)));
-            }
-            return res.text();
-        })
-        .then(() => refreshSequenceData())
-        .catch((err) => console.error("Fehler bei /playSequence:", err));
-}
-
-function clearSequence() {
-    fetch("/clearSequence")
-        .then((res) => res.text())
-        .then(() => refreshSequenceData())
-        .catch((err) => console.error("Fehler bei /clearSequence:", err));
-}
-
-function moveHome() {
-    fetch("/home")
-        .then(() => refreshSequenceData())
-        .catch((err) => console.error("Fehler bei /home:", err));
-}
-
-function stopSequence() {
-    fetch("/stop")
-        .then((res) => res.text())
-        .then(() => refreshSequenceData())
-        .catch((err) => console.error("Fehler bei /stop:", err));
-}
-
-function updateSpeedLabel(id, value) {
-    document.getElementById(`speedVal${id}`).innerText = value;
-}
-
-function syncSpeedControls(data) {
-    for (let i = 0; i < data.length; i++) {
-        const slider = document.getElementById(`speed${i}`);
-        if (!slider) {
-            continue;
-        }
-        slider.value = data[i];
-        updateSpeedLabel(i, data[i]);
-    }
-}
-
-function setServoSpeed(id, value) {
-    fetch(`/setSpeed?servo=${id}&value=${value}`)
-        .then((res) => {
-            if (!res.ok) {
-                return res.text().then((text) => Promise.reject(new Error(text)));
-            }
-            return refreshSpeeds();
-        })
-        .catch((err) => console.error("Fehler bei /setSpeed:", err));
-}
-
-function initControlBindings() {
-    document.querySelectorAll(".speed-slider").forEach((slider) => {
-        slider.addEventListener("input", (event) => {
-            const id = Number(event.target.dataset.servo);
-            updateSpeedLabel(id, event.target.value);
-        });
-        slider.addEventListener("change", (event) => {
-            const id = Number(event.target.dataset.servo);
-            setServoSpeed(id, event.target.value);
-        });
-    });
-
-    document.querySelectorAll(".minus, .plus").forEach((button) => {
-        const startHandler = (event) => {
-            event.preventDefault();
-            const id = Number(button.dataset.servo);
-            const dir = Number(button.dataset.dir);
-            startMove(id, dir);
-        };
-        const stopHandler = (event) => {
-            event.preventDefault();
-            const id = Number(button.dataset.servo);
-            stopMove(id);
-        };
-
-        button.addEventListener("mousedown", startHandler);
-        button.addEventListener("mouseup", stopHandler);
-        button.addEventListener("mouseleave", stopHandler);
-        button.addEventListener("touchstart", startHandler, { passive: false });
-        button.addEventListener("touchend", stopHandler);
-        button.addEventListener("touchcancel", stopHandler);
-    });
-}
-
-function renderSequenceList(data) {
-    const list = document.getElementById("sequenceList");
-    renderedSequenceCount = data.count;
-    if (!data.steps.length) {
-        list.innerHTML = '<p class="sequence-empty">Noch keine Positionen gespeichert.</p>';
-        return;
-    }
-
-    list.innerHTML = data.steps.map((step, index) => {
-        const positions = step.map((value, servoIndex) =>
-            `<div>Servo ${servoIndex}: ${value}${String.fromCharCode(176)}</div>`
-        ).join("");
-        const activeClass = data.currentStep === index ? " active" : "";
-        const stateLabel = data.currentStep === index ? " (aktiv)" : "";
-        return `
-            <div class="sequence-step${activeClass}" data-step-index="${index}">
-                <div class="sequence-step-title">Schritt ${index + 1}${stateLabel}</div>
-                <div class="sequence-step-grid">${positions}</div>
-            </div>
-        `;
-    }).join("");
-}
-
-function updateSequenceStatus(data) {
-    document.getElementById("sequenceStatus").innerText =
-        `Gespeicherte Positionen: ${data.count} | Wiedergabe: ${data.playing ? "aktiv" : "bereit"}`;
-}
-
-function setActiveSequenceStep(currentStep) {
-    const steps = document.querySelectorAll(".sequence-step");
-    steps.forEach((step) => {
-        const index = Number(step.dataset.stepIndex);
-        const title = step.querySelector(".sequence-step-title");
-        const isActive = index === currentStep;
-        step.classList.toggle("active", isActive);
-        title.innerText = `Schritt ${index + 1}${isActive ? " (aktiv)" : ""}`;
-    });
-}
-
-function refreshSequenceData() {
-    return fetch("/sequenceData")
-        .then((res) => res.json())
-        .then((data) => {
-            updateSequenceStatus(data);
-            renderSequenceList(data);
-        })
-        .catch((err) => console.error("Fehler bei /sequenceData:", err));
-}
-
-function refreshSequenceStatus() {
-    fetch("/sequenceStatus")
-        .then((res) => res.json())
-        .then((data) => {
-            updateSequenceStatus(data);
-            setActiveSequenceStep(data.currentStep);
-            if (data.count !== renderedSequenceCount) {
-                return refreshSequenceData();
-            }
-        })
-        .catch((err) => console.error("Fehler bei /sequenceStatus:", err));
-}
-
-function refreshPositions() {
-    fetch("/positions")
-        .then((res) => res.json())
-        .then((data) => {
-            for (let i = 0; i < data.length; i++) {
-                document.getElementById(`val${i}`).innerText =
-                    `${data[i]} ${String.fromCharCode(176)}`;
-            }
-        })
-        .catch((err) => console.error("Fehler bei /positions:", err));
-}
-
-function refreshSpeeds() {
-    return fetch("/speeds")
-        .then((res) => res.json())
-        .then((data) => syncSpeedControls(data))
-        .catch((err) => console.error("Fehler bei /speeds:", err));
-}
-
-setInterval(refreshPositions, 300);
-refreshPositions();
-setInterval(refreshSequenceStatus, 500);
-refreshSequenceData();
-refreshSpeeds();
-initControlBindings();
-</script>
-</body>
-</html>
-)rawliteral";
 
 WebServer server(kHttpPort);
 Preferences preferences;
@@ -618,47 +249,6 @@ void moveToHomePosition() {
     }
 }
 
-void sendServoCard(uint8_t servoId) {
-    char row[320];
-    snprintf(
-        row,
-        sizeof(row),
-        "<div class='card'><div class='servo-row'><h3>Servo %u</h3>"
-        "<div class='value' id='val%u'>%d&deg;</div>",
-        servoId,
-        servoId,
-        servoPositions[servoId]);
-    server.sendContent(row);
-
-    snprintf(
-        row,
-        sizeof(row),
-        "<div class='speed-control'><label class='speed-label' for='speed%u'>Geschwindigkeit: "
-        "<span id='speedVal%u'>%u</span></label>"
-        "<input class='speed-slider' id='speed%u' type='range' min='%u' max='%u' value='%u' "
-        "data-servo='%u'></div>",
-        servoId,
-        servoId,
-        servoSpeeds[servoId],
-        servoId,
-        kServoSpeedMin,
-        kServoSpeedMax,
-        servoSpeeds[servoId],
-        servoId);
-    server.sendContent(row);
-
-    snprintf(
-        row,
-        sizeof(row),
-        "<div class='button-group'>"
-        "<button class='minus' type='button' data-servo='%u' data-dir='-1'>-</button>"
-        "<button class='plus' type='button' data-servo='%u' data-dir='1'>+</button>"
-        "</div></div></div>",
-        servoId,
-        servoId);
-    server.sendContent(row);
-}
-
 void stopSequenceInternal() {
     sequencePlaying = false;
     sequenceIndex = 0;
@@ -738,16 +328,13 @@ void updateSequence() {
 }
 
 void handleRoot() {
-    server.sendHeader("Cache-Control", "no-store, no-cache, must-revalidate");
-    server.sendHeader("Pragma", "no-cache");
-    server.sendHeader("Expires", "0");
-    server.setContentLength(CONTENT_LENGTH_UNKNOWN);
-    server.send(200, "text/html; charset=UTF-8", "");
-    server.sendContent_P(kHtmlHeader);
-    for (uint8_t i = 0; i < kServoCount; i++) {
-        sendServoCard(i);
+    File file = LittleFS.open("/index.html");
+    if (!file) {
+        server.send(404, "text/plain", "File not found");
+        return;
     }
-    server.sendContent_P(kHtmlFooter);
+    server.streamFile(file, "text/html");
+    file.close();
 }
 
 void handleStartMove() {
@@ -927,6 +514,12 @@ void handleSpeeds() {
 
 void setup() {
     Serial.begin(kSerialBaudRate);
+
+    if (!LittleFS.begin(true)) {
+        Serial.println("LittleFS Mount Failed");
+        return;
+    }
+
     WiFi.softAP(kApName, kApPassword);
 
     for (uint8_t i = 0; i < kServoCount; i++) {
@@ -956,6 +549,8 @@ void setup() {
     server.on("/stop", handleStop);
     server.on("/positions", handlePositions);
     server.on("/speeds", handleSpeeds);
+    server.serveStatic("/style.css", LittleFS, "/style.css");
+    server.serveStatic("/script.js", LittleFS, "/script.js");
     server.begin();
 }
 
