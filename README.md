@@ -1,83 +1,136 @@
 # ESP32 Web Robot Arm
 
-A practice and portfolio project for controlling a **6-axis robotic arm via a web interface running on an ESP32**.
+Ein ESP32-basiertes Projekt zur Steuerung eines 6-Achs-Roboterarms ueber eine Weboberflaeche im Browser.
 
-The project demonstrates how embedded hardware can be controlled through a browser interface using a built-in microcontroller web server.
+Der ESP32 startet einen eigenen WLAN-Access-Point und stellt die Bedienoberflaeche direkt selbst bereit. Die Steuerung erfolgt ohne zusaetzlichen Server oder Cloud-Dienst ueber HTML, CSS, JavaScript und eine kleine REST-aehnliche API auf dem Geraet.
 
----
+## Funktionen
 
-# Goal
+- Steuerung von 6 Servos ueber eine Weboberflaeche
+- Bewegung pro Servo ueber Plus-/Minus-Tasten
+- Individuelle Geschwindigkeitssteuerung pro Servo
+- Anfahren einer Grundstellung
+- Speichern einzelner Positionen als Sequenz
+- Ueberschreiben, Abspielen und Loeschen von Sequenzen
+- Persistente Speicherung der Sequenz im Flash
+- Auslieferung der Webdateien ueber LittleFS
 
-The goal of this project is to build a **browser-based control system for a robotic arm with multiple servo motors**.
+## Projektaufbau
 
-The ESP32 acts as a **WiFi web server**, allowing the robotic arm to be controlled from any device with a browser.
+- `firmware/` Firmware-Projekt auf Basis von PlatformIO
+- `firmware/src/main.cpp` Hauptlogik fuer WLAN, Webserver, Servo-Steuerung und Sequenzverwaltung
+- `firmware/data/` Weboberflaeche (`index.html`, `style.css`, `script.js`) fuer LittleFS
+- `docs/` technische Dokumentation
+- `hardware/` Hardware-Notizen und Schaltungsinformationen
 
----
+## Verwendete Technologien
 
-# Project Structure
+- ESP32
+- Arduino Framework
+- PlatformIO
+- C++
+- HTML / CSS / JavaScript
+- LittleFS
+- `WebServer`, `Preferences`, `ESP32Servo`
 
-* `firmware/` ESP32 source code
-* `firmware/data/` HTML, CSS and JavaScript files served from LittleFS on the ESP32
-* `web/` browser prototypes and experiments
-* `docs/` technical documentation
-* `hardware/` wiring and hardware notes
-* `images/` screenshots and photos
+## Hardware
 
----
+Geplant bzw. verwendet:
 
+- ESP32 Dev Board
+- 6 Servomotoren
+- Externe 5V-Stromversorgung fuer die Servos
+- Roboterarm-Gestell, z. B. 3D-gedruckt
 
+Optional:
 
-# Technologies
+- PCA9685 fuer erweiterte Servo-Ansteuerung
 
-* ESP32
-* C++
-* Arduino Framework
-* HTML / CSS / JavaScript
-* LittleFS
-* REST-style API
+## Voraussetzungen
 
----
+Fuer Build und Upload wird benoetigt:
 
-# Firmware Upload
+- [PlatformIO](https://platformio.org/)
+- Ein per USB angeschlossener ESP32
+- Python bzw. PlatformIO-CLI in einer funktionierenden lokalen Umgebung
 
-The web interface is split into separate files in `firmware/data/` and is served from the ESP32 file system.
+## Konfiguration
 
-After flashing the firmware, upload the LittleFS data partition as well:
+Die wichtigsten Projektparameter stehen in `firmware/platformio.ini`.
+
+Standardmaessig startet der ESP32 mit:
+
+- WLAN-Name: `ESP32-Roboterarm`
+- Passwort: `robotarm123`
+
+Diese Werte koennen ueber `build_flags` angepasst werden.
+
+## Build
+
+```powershell
+cd firmware
+pio run
+```
+
+## Firmware und Webdateien auf den ESP32 laden
+
+Da die Weboberflaeche in `firmware/data/` liegt und ueber LittleFS ausgeliefert wird, muessen Firmware und Dateisystem getrennt uebertragen werden.
+
+### 1. Firmware flashen
 
 ```powershell
 cd firmware
 pio run -t upload
+```
+
+### 2. LittleFS-Dateien hochladen
+
+```powershell
+cd firmware
 pio run -t uploadfs
 ```
 
----
+Empfehlung: Nach Aenderungen an `index.html`, `style.css` oder `script.js` immer `uploadfs` ausfuehren.
 
-# Learning Goals
+## Nutzung
 
-This project is intended to practice:
+1. ESP32 per USB mit Strom versorgen oder normal starten.
+2. Mit einem Smartphone, Tablet oder Laptop in das WLAN `ESP32-Roboterarm` wechseln.
+3. Im Browser `http://192.168.4.1/` aufrufen.
+4. Servos manuell bewegen, Geschwindigkeiten anpassen und Sequenzen speichern oder abspielen.
 
-* Embedded systems programming
-* Hardware control using microcontrollers
-* Web servers on embedded devices
-* Modular software architecture
-* API-driven hardware control
+## Bedienkonzept
 
----
+- Plus-/Minus-Tasten bewegen den jeweiligen Servo schrittweise
+- Ein Slider pro Servo stellt die Bewegungsgeschwindigkeit ein
+- `Grundstellung` faehrt alle Servos in ihre Home-Position
+- `Position speichern` haengt die aktuelle Stellung an die Sequenz an
+- `Sequenz ueberschreiben` ersetzt die bestehende Sequenz durch die aktuelle Position
+- `Sequenz abspielen` faehrt alle gespeicherten Schritte nacheinander ab
+- `Sequenz loeschen` entfernt die gespeicherten Schritte
+- `STOP` beendet laufende Bewegungen bzw. Sequenzwiedergabe
 
-# Planned Hardware
+## Persistenz
 
-* ESP32 microcontroller
-* 6 servo motors
-* 3D printed robotic arm
-* external 5V power supply
+Gespeicherte Sequenzen werden ueber `Preferences` im Flash des ESP32 abgelegt und nach einem Neustart automatisch wieder geladen.
 
-Optional:
+## Bekannte Hinweise
 
-* PCA9685 servo controller
+- Die Servos sollten nicht direkt ueber den 5V-Pin eines USB-Anschlusses versorgt werden.
+- Fuer stabile Bewegungen ist eine separate Stromversorgung fuer die Servos empfehlenswert.
+- Nach Aenderungen an der Weboberflaeche reicht ein normales Firmware-Flashen nicht aus, solange `uploadfs` nicht ebenfalls ausgefuehrt wurde.
 
----
+## Entwicklungsziel
 
-# License
+Das Projekt dient als Lern- und Praxisprojekt fuer:
 
-MIT License
+- Embedded-Programmierung mit ESP32
+- Ansteuerung mehrerer Servos
+- Webserver auf Mikrocontrollern
+- Zustandsverwaltung und persistente Speicherung
+- Trennung von Firmware und Weboberflaeche
+
+## Lizenz
+
+Dieses Projekt steht unter der MIT-Lizenz. Details stehen in `LICENSE`.
 
