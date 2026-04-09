@@ -4,6 +4,16 @@ Ein ESP32-basiertes Projekt zur Steuerung eines 6-Achs-Roboterarms ueber eine We
 
 Der ESP32 startet einen eigenen WLAN-Access-Point und stellt die Bedienoberflaeche direkt selbst bereit. Die Steuerung erfolgt ohne zusaetzlichen Server oder Cloud-Dienst ueber HTML, CSS, JavaScript und eine kleine REST-aehnliche API auf dem Geraet.
 
+## Navigation
+
+- [Dokumentationsuebersicht](docs/README.md)
+- [Architektur](docs/architecture.md)
+- [API-Dokumentation](docs/api.md)
+- [Hardware](docs/hardware.md)
+- [Deployment](docs/deployment.md)
+- [Troubleshooting](docs/troubleshooting.md)
+- [Projektplan](docs/project-plan.md)
+
 ## Funktionen
 
 - Steuerung von 6 Servos ueber eine Weboberflaeche
@@ -129,6 +139,15 @@ Das Projekt dient als Lern- und Praxisprojekt fuer:
 - Webserver auf Mikrocontrollern
 - Zustandsverwaltung und persistente Speicherung
 - Trennung von Firmware und Weboberflaeche
+
+## Weiterfuehrende Dokumentation
+
+Fuer technische Details und Projektpflege:
+
+- [Dokumentationsuebersicht](docs/README.md)
+- [Architektur](docs/architecture.md)
+- [API-Dokumentation](docs/api.md)
+- [Projektplan](docs/project-plan.md)
 
 ## Lizenz
 
