@@ -1,7 +1,9 @@
 #include <Arduino.h>
 #include <ESP32Servo.h>
+#include <Preferences.h>
 #include <WebServer.h>
 #include <WiFi.h>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -11,12 +13,15 @@ constexpr uint16_t kHttpPort = 80;
 constexpr uint32_t kSequenceHoldMs = 1000;
 constexpr uint16_t kServoPulseMinUs = 500;
 constexpr uint16_t kServoPulseMaxUs = 2400;
-constexpr uint16_t kSerialBaudRate = 115200;
+constexpr uint32_t kSerialBaudRate = 115200;
 constexpr uint8_t kServoSpeedMin = 1;
 constexpr uint8_t kServoSpeedMax = 10;
 constexpr uint8_t kServoSpeedDefault = 5;
 constexpr uint32_t kServoMoveIntervalSlowMs = 120;
 constexpr uint32_t kServoMoveIntervalFastMs = 12;
+constexpr size_t kMaxRecordedSteps = 128;
+constexpr uint16_t kSequenceFormatVersion = 1;
+constexpr uint32_t kSequenceMagic = 0x52524D31;  // "RRM1"
 
 #ifndef ROBOT_ARM_AP_NAME
 #define ROBOT_ARM_AP_NAME "ESP32-Roboterarm"
@@ -118,6 +123,10 @@ button {
     background-color: #fd7e14;
     width: 200px;
 }
+.overwrite {
+    background-color: #17a2b8;
+    width: 200px;
+}
 .home {
     background-color: #ff8c00;
     width: 200px;
@@ -168,6 +177,7 @@ button {
 <div class="card">
     <button class="home" onclick="moveHome()">Grundstellung</button><br><br>
     <button class="record" onclick="recordPosition()">Position speichern</button><br><br>
+    <button class="overwrite" onclick="overwriteSequence()">Sequenz überschreiben</button><br><br>
     <button class="seq" onclick="playSequence()">Sequenz abspielen</button><br><br>
     <button class="clear" onclick="clearSequence()">Sequenz löschen</button><br><br>
     <button class="stop" onclick="stopSequence()">STOP</button>
@@ -205,6 +215,18 @@ function recordPosition() {
         .then((res) => res.text())
         .then(() => refreshSequenceData())
         .catch((err) => console.error("Fehler bei /record:", err));
+}
+
+function overwriteSequence() {
+    fetch("/overwriteSequence")
+        .then((res) => {
+            if (!res.ok) {
+                return res.text().then((text) => Promise.reject(new Error(text)));
+            }
+            return res.text();
+        })
+        .then(() => refreshSequenceData())
+        .catch((err) => console.error("Fehler bei /overwriteSequence:", err));
 }
 
 function playSequence() {
@@ -392,6 +414,7 @@ initControlBindings();
 )rawliteral";
 
 WebServer server(kHttpPort);
+Preferences preferences;
 Servo servos[kServoCount];
 int servoPositions[kServoCount] = {90, 90, 90, 90, 90, 90};
 int servoTargets[kServoCount] = {90, 90, 90, 90, 90, 90};
@@ -408,6 +431,12 @@ bool sequencePlaying = false;
 size_t sequenceIndex = 0;
 unsigned long lastServoMoveAt[kServoCount] = {0};
 unsigned long sequenceStepReachedAt = 0;
+
+struct StoredSequenceHeader {
+    uint32_t magic;
+    uint16_t version;
+    uint16_t count;
+};
 
 bool parseServoId(uint8_t &servoId) {
     if (!server.hasArg("servo")) {
@@ -475,12 +504,90 @@ void setServoTarget(uint8_t id, int angle) {
     servoTargets[id] = constrain(angle, kServoMin[id], kServoMax[id]);
 }
 
-void recordCurrentPosition() {
+bool openPreferences(bool readOnly) {
+    return preferences.begin("robotarm", readOnly);
+}
+
+bool saveSequenceToStorage() {
+    if (!openPreferences(false)) {
+        return false;
+    }
+
+    StoredSequenceHeader header = {
+        kSequenceMagic,
+        kSequenceFormatVersion,
+        static_cast<uint16_t>(recordedSequence.size())};
+
+    const size_t writtenHeader = preferences.putBytes("seqHdr", &header, sizeof(header));
+    if (writtenHeader != sizeof(header)) {
+        preferences.end();
+        return false;
+    }
+
+    bool ok = true;
+    if (recordedSequence.empty()) {
+        preferences.remove("seqData");
+    } else {
+        const size_t totalBytes = recordedSequence.size() * sizeof(SequenceStep);
+        const size_t writtenData = preferences.putBytes("seqData", recordedSequence.data(), totalBytes);
+        ok = (writtenData == totalBytes);
+    }
+
+    preferences.end();
+    return ok;
+}
+
+bool loadSequenceFromStorage() {
+    if (!openPreferences(true)) {
+        return false;
+    }
+
+    StoredSequenceHeader header = {};
+    const size_t readHeader = preferences.getBytes("seqHdr", &header, sizeof(header));
+    if (readHeader != sizeof(header) || header.magic != kSequenceMagic ||
+        header.version != kSequenceFormatVersion) {
+        preferences.end();
+        return false;
+    }
+
+    if (header.count > kMaxRecordedSteps) {
+        preferences.end();
+        return false;
+    }
+
+    std::vector<SequenceStep> loaded(header.count);
+    if (header.count > 0) {
+        const size_t totalBytes = header.count * sizeof(SequenceStep);
+        const size_t readData = preferences.getBytes("seqData", loaded.data(), totalBytes);
+        if (readData != totalBytes) {
+            preferences.end();
+            return false;
+        }
+    }
+
+    preferences.end();
+
+    for (SequenceStep &step : loaded) {
+        for (uint8_t i = 0; i < kServoCount; i++) {
+            step.positions[i] = constrain(step.positions[i], kServoMin[i], kServoMax[i]);
+        }
+    }
+
+    recordedSequence = std::move(loaded);
+    return true;
+}
+
+bool recordCurrentPosition() {
+    if (recordedSequence.size() >= kMaxRecordedSteps) {
+        return false;
+    }
+
     SequenceStep step = {};
     for (uint8_t i = 0; i < kServoCount; i++) {
         step.positions[i] = servoPositions[i];
     }
     recordedSequence.push_back(step);
+    return true;
 }
 
 void applySequenceStep(size_t index) {
@@ -679,7 +786,14 @@ void handleSetSpeed() {
 
 void handleRecord() {
     stopSequenceInternal();
-    recordCurrentPosition();
+    if (!recordCurrentPosition()) {
+        server.send(400, "text/plain", "sequence limit reached");
+        return;
+    }
+    if (!saveSequenceToStorage()) {
+        server.send(500, "text/plain", "persist failed");
+        return;
+    }
     server.send(200, "text/plain", "recorded");
 }
 
@@ -708,7 +822,25 @@ void handleStop() {
 void handleClearSequence() {
     stopSequenceInternal();
     recordedSequence.clear();
+    if (!saveSequenceToStorage()) {
+        server.send(500, "text/plain", "persist failed");
+        return;
+    }
     server.send(200, "text/plain", "clear");
+}
+
+void handleOverwriteSequence() {
+    stopSequenceInternal();
+    recordedSequence.clear();
+    if (!recordCurrentPosition()) {
+        server.send(400, "text/plain", "sequence limit reached");
+        return;
+    }
+    if (!saveSequenceToStorage()) {
+        server.send(500, "text/plain", "persist failed");
+        return;
+    }
+    server.send(200, "text/plain", "overwritten");
 }
 
 void handleSequenceStatus() {
@@ -804,11 +936,18 @@ void setup() {
         servos[i].write(servoPositions[i]);
     }
 
+    if (loadSequenceFromStorage()) {
+        Serial.printf("Sequenz aus Flash geladen (%u Schritte)\n", static_cast<unsigned>(recordedSequence.size()));
+    } else {
+        Serial.println("Keine gueltige gespeicherte Sequenz gefunden");
+    }
+
     server.on("/", handleRoot);
     server.on("/startMove", handleStartMove);
     server.on("/stopMove", handleStopMove);
     server.on("/setSpeed", handleSetSpeed);
     server.on("/record", handleRecord);
+    server.on("/overwriteSequence", handleOverwriteSequence);
     server.on("/playSequence", handlePlaySequence);
     server.on("/clearSequence", handleClearSequence);
     server.on("/sequenceStatus", handleSequenceStatus);
